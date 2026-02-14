@@ -2,7 +2,7 @@ import { GoogleGenAI, Type } from "@google/genai";
 import { Scene, StoryConfig, SHOT_TYPES } from "../types";
 
 // Allow empty API key in environment - users will provide their own
-const apiKey = process.env.API_KEY || process.env.GEMINI_API_KEY || "";
+const apiKey = import.meta.env.VITE_GEMINI_API_KEY || "";
 
 // Create default AI instance (will be overridden if user provides their own key)
 const ai = new GoogleGenAI({ apiKey });
