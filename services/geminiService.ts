@@ -1,4 +1,4 @@
-import { GoogleGenerativeAI } from "@google/generative-ai";
+import { GoogleGenAI } from "@google/genai";
 import { Scene, StoryConfig, SHOT_TYPES } from "../types";
 
 // Allow empty API key in environment - users will provide their own
@@ -6,11 +6,11 @@ const envApiKey = import.meta.env.VITE_GEMINI_API_KEY || "";
 
 // Helper to lazily create AI client
 const getAiClient = (userKey?: string) => {
-  const key = (userKey || envApiKey).trim(); // Remove whitespace from key
+  const key = (userKey || envApiKey).trim();
   if (!key) {
     throw new Error("Gemini API Key is missing. Please enter your key.");
   }
-  return new GoogleGenerativeAI(key);
+  return new GoogleGenAI({ apiKey: key });
 };
 
 // Helper to strip "data:image/xyz;base64," prefix
@@ -23,24 +23,10 @@ export const generateStoryBreakdown = async (
   storyText: string,
   style: string,
   apiKeyOverride?: string,
-  modelName: string = "gemini-1.5-flash"
+  modelName: string = "gemini-2.0-flash"
 ): Promise<Scene[]> => {
   try {
-    const genAI = getAiClient(apiKeyOverride);
-
-    // Determine configuration based on model version
-    // JSON mode is supported in Gemini 1.5+ models
-    const isJsonModeSupported = modelName.includes("1.5") || modelName.includes("2.0");
-
-    const modelConfig: any = {
-      model: modelName
-    };
-
-    if (isJsonModeSupported) {
-      modelConfig.generationConfig = { responseMimeType: "application/json" };
-    }
-
-    const model = genAI.getGenerativeModel(modelConfig);
+    const ai = getAiClient(apiKeyOverride);
 
     const prompt = `
       You are a professional storyboard artist.
@@ -62,22 +48,28 @@ export const generateStoryBreakdown = async (
       - "scene_number": (1-9)
       - "description": (Detailed visual description for image generation)
       - "text": (Short caption for the panel, max 20 words)
-      - "shot_type": (One of the values from the provided SHOT_TYPES list, e.g. "Extreme Long Shot")
+      - "shot_type": (One of the values from the provided SHOT_TYPES list)
     `;
 
-    const result = await model.generateContent(prompt);
-    const response = await result.response;
-    const text = response.text();
+    const response = await ai.models.generateContent({
+      model: modelName,
+      contents: prompt,
+      config: {
+        responseMimeType: "application/json",
+      }
+    });
 
+    // IMPORTANT: In @google/genai, response.text is a PROPERTY, not a method!
+    const text = response.text ?? "";
     const cleanText = text.replace(/```json/g, "").replace(/```/g, "").trim();
     const rawScenes = JSON.parse(cleanText);
 
     // Map raw response to Scene interface
     return rawScenes.map((s: any, index: number) => ({
-      id: index + 1,
+      id: s.scene_number || index + 1,
       description: s.description,
-      caption: s.text || s.caption,
-      shotType: s.shot_type || s.shotType,
+      caption: s.text || s.caption || "",
+      shotType: s.shot_type || s.shotType || "Medium shot",
       mood: "Cinematic",
       videoPrompt: s.description
     })) as Scene[];
@@ -88,8 +80,6 @@ export const generateStoryBreakdown = async (
 };
 
 // 2. Generate Image for a Panel (Image Generation)
-// Note: This currently mocks image generation by returning text, 
-// as standard Gemini Flash models do not generate images directly.
 export const generatePanelImage = async (
   scene: Scene,
   style: string,
@@ -99,52 +89,50 @@ export const generatePanelImage = async (
   apiKeyOverride?: string
 ): Promise<string> => {
   try {
-    const genAI = getAiClient(apiKeyOverride);
-    const model = genAI.getGenerativeModel({ model: "gemini-1.5-flash" });
+    const ai = getAiClient(apiKeyOverride);
 
     const prompt = `
-      Create a detailed text description for an image generation model (like DALL-E or Midjourney) 
-      based on this storyboard scene.
+      Create a detailed visual description for an image of this storyboard scene.
       
       Scene ID: ${scene.id}
       Style: ${style}
       Shot Type: ${scene.shotType}
       Description: ${scene.description}
       Aspect Ratio: ${aspectRatio}
+      
+      Requirements:
+      - High quality, detailed, professional storyboard art
+      - No text, no logo, no watermark inside the image
+      - IMPORTANT: Respect the requested Shot Type strictly.
     `;
 
-    let contents: any[] = [prompt];
+    let contents: any = prompt;
 
+    // If reference image provided, add it to contents as multimodal input
     if (referenceImage) {
       const base64Data = stripBase64Prefix(referenceImage);
-      contents.push({
-        inlineData: {
-          mimeType: "image/jpeg",
-          data: base64Data
+      contents = [
+        prompt + "\n\nUse the uploaded image as a strict character reference.",
+        {
+          inlineData: {
+            mimeType: "image/jpeg",
+            data: base64Data
+          }
         }
-      });
-      contents[0] += "\n\n(Reference image provided for character consistency)";
+      ];
     }
 
-    const result = await model.generateContent(contents);
-    const response = await result.response;
-    const text = response.text();
+    const response = await ai.models.generateContent({
+      model: modelName,
+      contents: contents,
+    });
 
-    // In a real implementation with Imagen, we would return the image URL/Base64 here.
-    // Since we are using Flash, we return the text. 
-    // The UI should handle this or we can use a placeholder image service.
+    // IMPORTANT: response.text is a PROPERTY, not a method!
+    const text = response.text ?? "";
 
-    // Returning a placeholder image URL for now to prevent broken images in UI, 
-    // or the text if the UI expects text. 
-    // But the return type is Promise<string> which is assigned to imageUrl.
-
-    // Let's return the text for now, assuming the UI might display it or handling is needed.
-    // Actually, to make the UI look good, let's use a placeholder service with the text as seed?
-    // limits: 2048 chars for some services.
-
-    // For now, let's just return the description text. The UI might show broken image icon 
-    // but at least it won't crash.
-    return "https://via.placeholder.com/1024x576.png?text=Image+Generation+Not+Implemented+for+Gemini+Flash";
+    // For now, return a placeholder image since Gemini Flash is a text model
+    // In a future version, this could use Imagen for actual image generation
+    return "https://via.placeholder.com/1024x576.png?text=Scene+" + scene.id;
   } catch (error) {
     console.error("Error generating image:", error);
     throw error;
