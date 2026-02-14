@@ -1,21 +1,21 @@
-import { GoogleGenAI } from "@google/genai";
+import { GoogleGenAI, Type } from "@google/genai";
 import { Scene, StoryConfig, SHOT_TYPES } from "../types";
 
-// Allow empty API key in environment - users will provide their own
-const envApiKey = import.meta.env.VITE_GEMINI_API_KEY || "";
+// Use Vite environment variable (VITE_ prefix required)
+const apiKey = import.meta.env.VITE_GEMINI_API_KEY || "";
 
-// Helper to lazily create AI client
-const getAiClient = (userKey?: string) => {
-  const key = (userKey || envApiKey).trim();
-  if (!key) {
-    throw new Error("Gemini API Key is missing. Please enter your key.");
-  }
-  return new GoogleGenAI({ apiKey: key });
-};
+// Default AI instance (may be empty - users provide their own key)
+const ai = new GoogleGenAI({ apiKey: apiKey || "placeholder" });
 
 // Helper to strip "data:image/xyz;base64," prefix
 const stripBase64Prefix = (base64Str: string) => {
   return base64Str.replace(/^data:image\/\w+;base64,/, "");
+};
+
+// Helper to extract MIME type from a data URL
+const getMimeType = (dataUrl: string): string => {
+  const match = dataUrl.match(/^data:(image\/\w+);/);
+  return match?.[1] || "image/jpeg";
 };
 
 // 1. Break the story into 9 scenes (Text Generation)
@@ -26,8 +26,7 @@ export const generateStoryBreakdown = async (
   modelName: string = "gemini-2.0-flash"
 ): Promise<Scene[]> => {
   try {
-    const ai = getAiClient(apiKeyOverride);
-
+    const activeAi = apiKeyOverride ? new GoogleGenAI({ apiKey: apiKeyOverride }) : ai;
     const prompt = `
       You are a professional storyboard artist.
       Break down the following story into exactly 9 distinct scenes for a 3x3 visual sequence.
@@ -35,103 +34,132 @@ export const generateStoryBreakdown = async (
       Story: "${storyText}"
       Style: "${style}"
 
-      Follow this narrative arc:
-      1. Intro / World / Entrance
-      2. Development / Action / Relationship
-      3. Twist / Problem / Emotion / Change
-      4. Climax / Resolution
+      Follow this narrative structure:
+      1-2: Intro (World/Entrance)
+      3-5: Development (Action/Relationship)
+      6: Twist (Problem/Emotion Change)
+      7-8: Climax
+      9: Resolution
 
-      For each scene, assign the specific shot type from the list below:
-      ${JSON.stringify(SHOT_TYPES)}
+      For each scene:
+      1. Assign the specific shot type based on the list below.
+      2. Write a 'videoPrompt' that describes the motion and camera movement (e.g., "Slow zoom in", "Pan right", "Character runs towards camera") suitable for AI video generation.
 
-      Return ONLY a JSON array. Each item must have:
-      - "scene_number": (1-9)
-      - "description": (Detailed visual description for image generation)
-      - "text": (Short caption for the panel, max 20 words)
-      - "shot_type": (One of the values from the provided SHOT_TYPES list)
+      Shot Types per index:
+      1: ${SHOT_TYPES[0]}
+      2: ${SHOT_TYPES[1]}
+      3: ${SHOT_TYPES[2]}
+      4: ${SHOT_TYPES[3]}
+      5: ${SHOT_TYPES[4]}
+      6: ${SHOT_TYPES[5]}
+      7: ${SHOT_TYPES[6]}
+      8: ${SHOT_TYPES[7]}
+      9: ${SHOT_TYPES[8]}
+
+      Return ONLY a JSON array.
     `;
 
-    const response = await ai.models.generateContent({
+    const response = await activeAi.models.generateContent({
       model: modelName,
       contents: prompt,
       config: {
         responseMimeType: "application/json",
-      }
+        responseSchema: {
+          type: Type.ARRAY,
+          items: {
+            type: Type.OBJECT,
+            properties: {
+              id: { type: Type.INTEGER },
+              description: { type: Type.STRING, description: "One sentence visual scene summary." },
+              caption: { type: Type.STRING, description: "A short, emotive caption (max 10 words)." },
+              mood: { type: Type.STRING, description: "Lighting and emotional tone." },
+              videoPrompt: { type: Type.STRING, description: "Detailed prompt for video generation tools. Describe specific camera movement and subject action." },
+            },
+            required: ["id", "description", "caption", "mood", "videoPrompt"],
+          },
+        },
+      },
     });
 
-    // IMPORTANT: In @google/genai, response.text is a PROPERTY, not a method!
-    const text = response.text ?? "";
-    const cleanText = text.replace(/```json/g, "").replace(/```/g, "").trim();
-    const rawScenes = JSON.parse(cleanText);
+    const jsonText = response.text;
+    if (!jsonText) throw new Error("No text returned from Gemini");
 
-    // Map raw response to Scene interface
-    return rawScenes.map((s: any, index: number) => ({
-      id: s.scene_number || index + 1,
-      description: s.description,
-      caption: s.text || s.caption || "",
-      shotType: s.shot_type || s.shotType || "Medium shot",
-      mood: "Cinematic",
-      videoPrompt: s.description
-    })) as Scene[];
+    const scenes: any[] = JSON.parse(jsonText);
+
+    // Merge with fixed shot types to ensure consistency
+    return scenes.map((scene, index) => ({
+      ...scene,
+      shotType: SHOT_TYPES[index] || "Medium Shot"
+    }));
+
   } catch (error) {
-    console.error("Error generating breakdown:", error);
+    console.error("Error breaking down story:", error);
     throw error;
   }
 };
 
-// 2. Generate Image for a Panel (Image Generation using Imagen 3)
+// 2. Generate a single panel image (Image Editing/Generation)
 export const generatePanelImage = async (
   scene: Scene,
-  style: string,
-  aspectRatio: string,
-  modelName: string,
-  referenceImage?: string,
-  apiKeyOverride?: string
+  config: StoryConfig
 ): Promise<string> => {
   try {
-    const ai = getAiClient(apiKeyOverride);
-
-    // Build a rich image generation prompt
-    const prompt = `${style} style illustration. ${scene.description}. Shot type: ${scene.shotType}. Professional storyboard art, high quality, detailed, cinematic lighting. No text overlay, no watermark, no logo.`;
-
-    // Map aspect ratio to Imagen-supported format
-    const imagenAspectRatio = aspectRatio === "9:16" ? "9:16" : "16:9";
-
-    try {
-      // Try Imagen 3 for image generation
-      const response = await ai.models.generateImages({
-        model: "imagen-3.0-generate-002",
-        prompt: prompt,
-        config: {
-          numberOfImages: 1,
-          aspectRatio: imagenAspectRatio,
-        },
-      });
-
-      // Check if images were generated
-      if (response.generatedImages && response.generatedImages.length > 0) {
-        const imageBytes = response.generatedImages[0].image?.imageBytes;
-        if (imageBytes) {
-          return `data:image/png;base64,${imageBytes}`;
-        }
-      }
-    } catch (imagenError: any) {
-      console.warn(`Imagen 3 failed for scene ${scene.id}:`, imagenError?.message || imagenError);
-      // Fall through to fallback
+    const activeAi = config.userApiKey ? new GoogleGenAI({ apiKey: config.userApiKey }) : ai;
+    if (!config.referenceImage) {
+      throw new Error("Reference image is required for panel generation.");
     }
 
-    // Fallback: Generate a placeholder SVG if Imagen fails
-    const width = aspectRatio === "9:16" ? 576 : 1024;
-    const height = aspectRatio === "9:16" ? 1024 : 576;
-    const svg = `<svg xmlns="http://www.w3.org/2000/svg" width="${width}" height="${height}">
-      <rect width="100%" height="100%" fill="#1e293b"/>
-      <text x="50%" y="40%" text-anchor="middle" fill="#f59e0b" font-size="20" font-family="Arial">⚠ Image generation unavailable</text>
-      <text x="50%" y="50%" text-anchor="middle" fill="#60a5fa" font-size="24" font-family="Arial">Scene ${scene.id}</text>
-      <text x="50%" y="60%" text-anchor="middle" fill="#94a3b8" font-size="14" font-family="Arial">${scene.shotType || 'Shot'}</text>
-    </svg>`;
-    return "data:image/svg+xml;charset=utf-8," + encodeURIComponent(svg);
+    const mimeType = getMimeType(config.referenceImage);
+    const base64Image = stripBase64Prefix(config.referenceImage);
+
+    const prompt = `
+Use the uploaded image as the exact character reference.
+Keep character identity unchanged: same face features, hairstyle, outfit, age, body shape.
+
+Aspect ratio: ${config.aspectRatio}
+
+Scene: ${scene.description}
+Shot: ${scene.shotType}
+Environment: detailed background fitting the story
+Lighting: ${scene.mood}
+Mood: ${scene.mood}
+Style: ${config.style}
+
+No text, no logo, no watermark. High quality, detailed.
+    `;
+
+    const getModelForImage = (model: string) => {
+      if (model === "gemini-2.5-flash") return "gemini-2.5-flash-image";
+      // The 3.0 Pro Image Preview already has image in name
+      return model;
+    };
+
+    const response = await activeAi.models.generateContent({
+      model: getModelForImage(config.model),
+      contents: {
+        parts: [
+          {
+            inlineData: {
+              mimeType,
+              data: base64Image,
+            },
+          },
+          { text: prompt },
+        ],
+      },
+    });
+
+    // Extract image from response
+    for (const part of response.candidates?.[0]?.content?.parts || []) {
+      if (part.inlineData && part.inlineData.data) {
+        return `data:image/png;base64,${part.inlineData.data}`;
+      }
+    }
+
+    throw new Error("No image data found in response");
+
   } catch (error) {
-    console.error("Error generating image:", error);
+    console.error(`Error generating panel ${scene.id}:`, error);
     throw error;
   }
 };
