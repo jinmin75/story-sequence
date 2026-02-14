@@ -95,11 +95,11 @@ export const StoryInput: React.FC<StoryInputProps> = ({ onStart, isProcessing })
           </div>
         </div>
 
-        {/* Optional API Key */}
-        <div className="bg-slate-900/50 p-4 rounded-lg border border-slate-700/50">
+        {/* API Key - Required */}
+        <div className="bg-slate-900/50 p-4 rounded-lg border border-blue-500/30">
           <label className="block text-sm font-medium text-blue-400 mb-1 flex items-center">
             <svg className="w-4 h-4 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 7a2 2 0 012 2m4 0a6 6 0 01-7.743 5.743L11 17H9v2H7v2H4a1 1 0 01-1-1v-2.586a1 1 0 01.293-.707l5.964-5.964A6 6 0 1121 9z" /></svg>
-            Personal Gemini API Key (Optional)
+            Your Gemini API Key (Required)
           </label>
           <input
             type="password"
@@ -108,8 +108,9 @@ export const StoryInput: React.FC<StoryInputProps> = ({ onStart, isProcessing })
             placeholder="AIza..."
             className="w-full bg-slate-900 border border-slate-700 rounded-lg p-2.5 text-white placeholder-slate-600 focus:ring-2 focus:ring-blue-500 focus:outline-none text-sm font-mono"
           />
-          <p className="mt-2 text-[10px] text-slate-500">
-            If provided, this key will be used instead of the default. Your key is not stored and only used for current session.
+          <p className="mt-2 text-[10px] text-slate-400">
+            Get your free API key at <a href="https://aistudio.google.com/apikey" target="_blank" rel="noopener noreferrer" className="text-blue-400 hover:underline">Google AI Studio</a>.
+            Your key is stored locally in your browser and never sent to our servers.
           </p>
         </div>
 

@@ -1,12 +1,11 @@
 import { GoogleGenAI, Type } from "@google/genai";
 import { Scene, StoryConfig, SHOT_TYPES } from "../types";
 
-const apiKey = process.env.API_KEY || process.env.GEMINI_API_KEY;
-if (!apiKey || apiKey === "PLACEHOLDER_API_KEY") {
-  console.error("GEMINI_API_KEY is not set. Please configure it in .env.local");
-}
+// Allow empty API key in environment - users will provide their own
+const apiKey = process.env.API_KEY || process.env.GEMINI_API_KEY || "";
 
-const ai = new GoogleGenAI({ apiKey: apiKey || "" });
+// Create default AI instance (will be overridden if user provides their own key)
+const ai = new GoogleGenAI({ apiKey });
 
 // Helper to strip "data:image/xyz;base64," prefix
 const stripBase64Prefix = (base64Str: string) => {
