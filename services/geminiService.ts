@@ -130,9 +130,15 @@ export const generatePanelImage = async (
     // IMPORTANT: response.text is a PROPERTY, not a method!
     const text = response.text ?? "";
 
-    // For now, return a placeholder image since Gemini Flash is a text model
-    // In a future version, this could use Imagen for actual image generation
-    return "https://via.placeholder.com/1024x576.png?text=Scene+" + scene.id;
+    // Generate a placeholder image as SVG data URI (no external dependency)
+    const width = aspectRatio === "9:16" ? 576 : 1024;
+    const height = aspectRatio === "9:16" ? 1024 : 576;
+    const svg = `<svg xmlns="http://www.w3.org/2000/svg" width="${width}" height="${height}">
+      <rect width="100%" height="100%" fill="#1e293b"/>
+      <text x="50%" y="45%" text-anchor="middle" fill="#60a5fa" font-size="24" font-family="Arial">Scene ${scene.id}</text>
+      <text x="50%" y="55%" text-anchor="middle" fill="#94a3b8" font-size="14" font-family="Arial">${scene.shotType || 'Shot'}</text>
+    </svg>`;
+    return "data:image/svg+xml;charset=utf-8," + encodeURIComponent(svg);
   } catch (error) {
     console.error("Error generating image:", error);
     throw error;
