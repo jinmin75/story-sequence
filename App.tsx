@@ -25,8 +25,8 @@ export default function App() {
     setAppState(AppState.PLANNING);
 
     try {
-      // Step 1: Break down story
-      const scenes = await generateStoryBreakdown(config.storyText, config.style, config.userApiKey, config.model);
+      // Step 1: Break down story (always use gemini-2.0-flash for text)
+      const scenes = await generateStoryBreakdown(config.storyText, config.style, config.userApiKey, "gemini-2.0-flash");
       const initialPanels = initializePanels(scenes);
       setPanels(initialPanels);
       setAppState(AppState.GENERATING);

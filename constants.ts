@@ -28,7 +28,6 @@ export const SCENE_STRUCTURE = [
 ];
 
 export const GEMINI_MODELS = [
-  { value: "gemini-2.0-flash-exp", label: "Gemini 2.0 Flash (Stable)" },
   { value: "gemini-2.5-flash-image", label: "Gemini 2.5 Flash Image (Fast & Smart 🍌)" },
   { value: "gemini-3-pro-image-preview", label: "Gemini 3 Pro Image (High Quality 🍌✨)" }
 ];
