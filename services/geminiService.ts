@@ -79,7 +79,7 @@ export const generateStoryBreakdown = async (
   }
 };
 
-// 2. Generate Image for a Panel (Image Generation)
+// 2. Generate Image for a Panel (Image Generation using Imagen 3)
 export const generatePanelImage = async (
   scene: Scene,
   style: string,
@@ -91,52 +91,43 @@ export const generatePanelImage = async (
   try {
     const ai = getAiClient(apiKeyOverride);
 
-    const prompt = `
-      Create a detailed visual description for an image of this storyboard scene.
-      
-      Scene ID: ${scene.id}
-      Style: ${style}
-      Shot Type: ${scene.shotType}
-      Description: ${scene.description}
-      Aspect Ratio: ${aspectRatio}
-      
-      Requirements:
-      - High quality, detailed, professional storyboard art
-      - No text, no logo, no watermark inside the image
-      - IMPORTANT: Respect the requested Shot Type strictly.
-    `;
+    // Build a rich image generation prompt
+    const prompt = `${style} style illustration. ${scene.description}. Shot type: ${scene.shotType}. Professional storyboard art, high quality, detailed, cinematic lighting. No text overlay, no watermark, no logo.`;
 
-    let contents: any = prompt;
+    // Map aspect ratio to Imagen-supported format
+    const imagenAspectRatio = aspectRatio === "9:16" ? "9:16" : "16:9";
 
-    // If reference image provided, add it to contents as multimodal input
-    if (referenceImage) {
-      const base64Data = stripBase64Prefix(referenceImage);
-      contents = [
-        prompt + "\n\nUse the uploaded image as a strict character reference.",
-        {
-          inlineData: {
-            mimeType: "image/jpeg",
-            data: base64Data
-          }
+    try {
+      // Try Imagen 3 for image generation
+      const response = await ai.models.generateImages({
+        model: "imagen-3.0-generate-002",
+        prompt: prompt,
+        config: {
+          numberOfImages: 1,
+          aspectRatio: imagenAspectRatio,
+        },
+      });
+
+      // Check if images were generated
+      if (response.generatedImages && response.generatedImages.length > 0) {
+        const imageBytes = response.generatedImages[0].image?.imageBytes;
+        if (imageBytes) {
+          return `data:image/png;base64,${imageBytes}`;
         }
-      ];
+      }
+    } catch (imagenError: any) {
+      console.warn(`Imagen 3 failed for scene ${scene.id}:`, imagenError?.message || imagenError);
+      // Fall through to fallback
     }
 
-    const response = await ai.models.generateContent({
-      model: modelName,
-      contents: contents,
-    });
-
-    // IMPORTANT: response.text is a PROPERTY, not a method!
-    const text = response.text ?? "";
-
-    // Generate a placeholder image as SVG data URI (no external dependency)
+    // Fallback: Generate a placeholder SVG if Imagen fails
     const width = aspectRatio === "9:16" ? 576 : 1024;
     const height = aspectRatio === "9:16" ? 1024 : 576;
     const svg = `<svg xmlns="http://www.w3.org/2000/svg" width="${width}" height="${height}">
       <rect width="100%" height="100%" fill="#1e293b"/>
-      <text x="50%" y="45%" text-anchor="middle" fill="#60a5fa" font-size="24" font-family="Arial">Scene ${scene.id}</text>
-      <text x="50%" y="55%" text-anchor="middle" fill="#94a3b8" font-size="14" font-family="Arial">${scene.shotType || 'Shot'}</text>
+      <text x="50%" y="40%" text-anchor="middle" fill="#f59e0b" font-size="20" font-family="Arial">⚠ Image generation unavailable</text>
+      <text x="50%" y="50%" text-anchor="middle" fill="#60a5fa" font-size="24" font-family="Arial">Scene ${scene.id}</text>
+      <text x="50%" y="60%" text-anchor="middle" fill="#94a3b8" font-size="14" font-family="Arial">${scene.shotType || 'Shot'}</text>
     </svg>`;
     return "data:image/svg+xml;charset=utf-8," + encodeURIComponent(svg);
   } catch (error) {
