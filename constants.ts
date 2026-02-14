@@ -1,0 +1,36 @@
+export const STYLES = [
+  "Cinematic Soft Light",
+  "Children's Picture Book",
+  "Warm Watercolor",
+  "Colored Pencil",
+  "Cyberpunk Neon",
+  "Vintage Film Photography",
+  "Studio Ghibli Style",
+  "Oil Painting",
+  "Noir Black and White"
+];
+
+export const ASPECT_RATIOS = [
+  { value: '16:9', label: '16:9 (YouTube/Landscape)' },
+  { value: '9:16', label: '9:16 (Shorts/Portrait)' }
+];
+
+export const SCENE_STRUCTURE = [
+  { id: 1, label: "Intro", desc: "Start (World/Entrance)" },
+  { id: 2, label: "Intro", desc: "Start (World/Entrance)" },
+  { id: 3, label: "Development", desc: "Action/Relationship" },
+  { id: 4, label: "Development", desc: "Action/Relationship" },
+  { id: 5, label: "Development", desc: "Action/Relationship" },
+  { id: 6, label: "Twist", desc: "Problem/Emotion Change" },
+  { id: 7, label: "Climax", desc: "Peak Action" },
+  { id: 8, label: "Climax", desc: "Peak Action" },
+  { id: 9, label: "Ending", desc: "Resolution/Aftertaste" }
+];
+
+export const GEMINI_MODELS = [
+  { value: "gemini-2.0-flash", label: "Gemini 2.0 Flash (Fast & Smart)" },
+  { value: "gemini-2.5-flash", label: "Gemini 2.5 Flash (Nano-Banana 🍌)" },
+  { value: "gemini-3.0-pro-image-preview", label: "Gemini 3.0 Pro (Nano-Banana Pro 🍌✨)" },
+  { value: "gemini-1.5-flash", label: "Gemini 1.5 Flash (Balanced)" },
+  { value: "gemini-1.5-pro", label: "Gemini 1.5 Pro (Powerful)" }
+];
