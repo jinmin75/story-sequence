@@ -36,7 +36,14 @@ export default function App() {
       for (let i = 0; i < initialPanels.length; i += batchSize) {
         const batch = initialPanels.slice(i, i + batchSize);
         const results = await Promise.allSettled(
-          batch.map(panel => generatePanelImage(panel.sceneData, config)
+          batch.map(panel => generatePanelImage(
+            panel.sceneData,
+            config.style,
+            config.aspectRatio || "16:9", // Default fallback if undefined
+            config.model || "gemini-2.0-flash", // Default fallback
+            config.referenceImage || undefined, // referenceImage from config
+            config.userApiKey
+          )
             .then(imageUrl => ({ id: panel.id, imageUrl, error: null }))
             .catch(() => ({ id: panel.id, imageUrl: null, error: "Generation Failed" }))
           )
@@ -61,7 +68,8 @@ export default function App() {
 
     } catch (error) {
       console.error("Critical error in workflow:", error);
-      alert("Something went wrong generating the story. Please try again.");
+      const errorMessage = error instanceof Error ? error.message : "Unknown error occurred";
+      alert(`Simulation Failed: ${errorMessage}`);
       setAppState(AppState.INPUT);
     }
   };
@@ -73,7 +81,14 @@ export default function App() {
     ));
 
     try {
-      const imageUrl = await generatePanelImage(scene, config);
+      const imageUrl = await generatePanelImage(
+        scene,
+        config.style,
+        config.aspectRatio || "16:9",
+        config.model || "gemini-2.0-flash",
+        config.referenceImage || undefined,
+        config.userApiKey
+      );
       setPanels(prev => prev.map(p =>
         p.id === id ? { ...p, imageUrl, isLoading: false } : p
       ));
