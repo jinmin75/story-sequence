@@ -18,6 +18,68 @@ const getMimeType = (dataUrl: string): string => {
   return match?.[1] || "image/jpeg";
 };
 
+// Cache for character description to avoid re-analyzing for each panel
+let cachedCharacterDescription: string | null = null;
+
+// 0. Analyze reference image to extract detailed character description
+export const analyzeReferenceImage = async (
+  referenceImage: string,
+  style: string,
+  apiKeyOverride?: string
+): Promise<string> => {
+  // Return cached description if available
+  if (cachedCharacterDescription) return cachedCharacterDescription;
+
+  try {
+    const activeAi = apiKeyOverride ? new GoogleGenAI({ apiKey: apiKeyOverride }) : ai;
+    const mimeType = getMimeType(referenceImage);
+    const base64Image = stripBase64Prefix(referenceImage);
+
+    const response = await activeAi.models.generateContent({
+      model: "gemini-2.0-flash",
+      contents: {
+        parts: [
+          {
+            inlineData: {
+              mimeType,
+              data: base64Image,
+            },
+          },
+          {
+            text: `You are a character design analyst. Analyze this reference image and provide an extremely detailed character description that can be used to maintain consistency across multiple illustrations.
+
+Describe the following in precise detail:
+1. FACE: Face shape, eye shape/color, nose, mouth, eyebrows, skin tone (use specific color like "warm peach" not just "light")
+2. HAIR: Exact hairstyle, hair color (specific shade), hair length, any accessories (ribbons, clips)
+3. BODY: Approximate age, body type, height proportion
+4. CLOTHING: Every piece of clothing in detail - colors, patterns, materials, how they fit
+5. ACCESSORIES: Any accessories, shoes, items they're holding
+6. OVERALL STYLE: The artistic style (e.g., "3D animated Pixar-like", "anime", "photorealistic")
+
+Format your response as a single dense paragraph that can be directly inserted into an image generation prompt. 
+Start with "Character: " and be as specific as possible.
+Do NOT include any scene or background descriptions.
+Keep it under 200 words.`
+          },
+        ],
+      },
+    });
+
+    const description = response.text || "";
+    cachedCharacterDescription = description;
+    console.log("Character description extracted:", description);
+    return description;
+  } catch (error) {
+    console.error("Error analyzing reference image:", error);
+    return "Character from the reference image";
+  }
+};
+
+// Reset character cache (call when starting a new generation)
+export const resetCharacterCache = () => {
+  cachedCharacterDescription = null;
+};
+
 // 1. Break the story into 9 scenes (Text Generation)
 export const generateStoryBreakdown = async (
   storyText: string,
@@ -109,23 +171,41 @@ export const generatePanelImage = async (
       throw new Error("Reference image is required for panel generation.");
     }
 
+    // Step 1: Get character description (cached after first call)
+    const characterDesc = await analyzeReferenceImage(
+      config.referenceImage,
+      config.style,
+      config.userApiKey
+    );
+
     const mimeType = getMimeType(config.referenceImage);
     const base64Image = stripBase64Prefix(config.referenceImage);
 
+    // Step 2: Build enhanced prompt with character description
     const prompt = `
-Use the uploaded image as the exact character reference.
-Keep character identity unchanged: same face features, hairstyle, outfit, age, body shape.
+CRITICAL INSTRUCTION: You MUST maintain EXACT character consistency with the reference image.
 
-Aspect ratio: ${config.aspectRatio}
+${characterDesc}
 
-Scene: ${scene.description}
-Shot: ${scene.shotType}
-Environment: detailed background fitting the story
-Lighting: ${scene.mood}
-Mood: ${scene.mood}
-Style: ${config.style}
+SCENE INSTRUCTIONS:
+- Scene: ${scene.description}
+- Shot Type: ${scene.shotType}
+- Mood/Lighting: ${scene.mood}
+- Art Style: ${config.style}
+- Aspect Ratio: ${config.aspectRatio}
 
-No text, no logo, no watermark. High quality, detailed.
+CONSISTENCY RULES (MUST FOLLOW):
+1. The character MUST look IDENTICAL to the reference image in every detail
+2. Same face structure, same eye shape/color, same hair style/color
+3. Same clothing and accessories unless the story explicitly changes them
+4. Only the pose, expression, camera angle, and background should change
+5. Maintain the same art style across all panels
+
+OUTPUT RULES:
+- Generate ONLY ONE character (the main character from the reference)
+- Do NOT add extra copies of the character
+- No text, no logo, no watermark
+- High quality, detailed, professional illustration
     `;
 
     const response = await activeAi.models.generateContent({

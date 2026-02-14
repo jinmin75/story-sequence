@@ -2,7 +2,7 @@ import React, { useState, useCallback } from 'react';
 import { StoryInput } from './components/StoryInput';
 import { Storyboard } from './components/Storyboard';
 import { AppState, GeneratedPanel, Scene, StoryConfig } from './types';
-import { generatePanelImage, generateStoryBreakdown } from './services/geminiService';
+import { generatePanelImage, generateStoryBreakdown, resetCharacterCache } from './services/geminiService';
 
 export default function App() {
   const [appState, setAppState] = useState<AppState>(AppState.INPUT);
@@ -23,6 +23,7 @@ export default function App() {
   const handleStart = async (config: StoryConfig) => {
     setStoryConfig(config);
     setAppState(AppState.PLANNING);
+    resetCharacterCache(); // Fresh character analysis for each new generation
 
     try {
       // Step 1: Break down story (always use gemini-2.0-flash for text)
