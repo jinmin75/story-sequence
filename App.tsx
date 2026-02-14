@@ -38,7 +38,7 @@ export default function App() {
         const results = await Promise.allSettled(
           batch.map(panel => generatePanelImage(panel.sceneData, config)
             .then(imageUrl => ({ id: panel.id, imageUrl, error: null }))
-            .catch(() => ({ id: panel.id, imageUrl: null, error: "Generation Failed" }))
+            .catch((err) => ({ id: panel.id, imageUrl: null, error: err instanceof Error ? err.message : "Generation Failed" }))
           )
         );
 
@@ -80,7 +80,7 @@ export default function App() {
       ));
     } catch (error) {
       setPanels(prev => prev.map(p =>
-        p.id === id ? { ...p, isLoading: false, error: "Generation Failed" } : p
+        p.id === id ? { ...p, isLoading: false, error: error instanceof Error ? error.message : "Generation Failed" } : p
       ));
     }
   };
