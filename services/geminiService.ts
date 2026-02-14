@@ -6,7 +6,7 @@ const envApiKey = import.meta.env.VITE_GEMINI_API_KEY || "";
 
 // Helper to lazily create AI client
 const getAiClient = (userKey?: string) => {
-  const key = userKey || envApiKey;
+  const key = (userKey || envApiKey).trim(); // Remove whitespace from key
   if (!key) {
     throw new Error("Gemini API Key is missing. Please enter your key.");
   }
@@ -27,10 +27,20 @@ export const generateStoryBreakdown = async (
 ): Promise<Scene[]> => {
   try {
     const genAI = getAiClient(apiKeyOverride);
-    const model = genAI.getGenerativeModel({
-      model: modelName.includes("gemini") ? modelName : "gemini-1.5-flash",
-      generationConfig: { responseMimeType: "application/json" }
-    });
+
+    // Determine configuration based on model version
+    // JSON mode is supported in Gemini 1.5+ models
+    const isJsonModeSupported = modelName.includes("1.5") || modelName.includes("2.0");
+
+    const modelConfig: any = {
+      model: modelName
+    };
+
+    if (isJsonModeSupported) {
+      modelConfig.generationConfig = { responseMimeType: "application/json" };
+    }
+
+    const model = genAI.getGenerativeModel(modelConfig);
 
     const prompt = `
       You are a professional storyboard artist.
