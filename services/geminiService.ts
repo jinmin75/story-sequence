@@ -128,16 +128,8 @@ Style: ${config.style}
 No text, no logo, no watermark. High quality, detailed.
     `;
 
-    const getModelForImage = (model: string) => {
-      // Map to models that support image generation
-      if (model === "gemini-2.5-flash") return "gemini-2.0-flash-exp";
-      if (model === "gemini-3.0-pro-image-preview") return "gemini-2.0-flash-exp";
-      if (model === "gemini-2.0-flash") return "gemini-2.0-flash-exp";
-      return model;
-    };
-
     const response = await activeAi.models.generateContent({
-      model: getModelForImage(config.model),
+      model: config.model,
       contents: {
         parts: [
           {
